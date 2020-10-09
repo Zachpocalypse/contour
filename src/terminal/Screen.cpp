@@ -426,7 +426,7 @@ void Screen::sendDeviceAttributes()
         //TODO: DeviceAttributes::NationalReplacementCharacterSets |
         //TODO: DeviceAttributes::RectangularEditing |
         //TODO: DeviceAttributes::SelectiveErase |
-        //TODO: DeviceAttributes::SixelGraphics |
+        DeviceAttributes::SixelGraphics |
         //TODO: DeviceAttributes::TechnicalCharacters |
         DeviceAttributes::UserDefinedKeys
     );
@@ -1166,13 +1166,36 @@ void Screen::sixelImage(string_view const& _data)
 
     auto const imageInstance = RasterizedImage{
         imageRef,
-        cellPixelSize_,
+        extent,
         ImageAlignment::TopStart,
-        ImageResize::NoResize
+        ImageResize::ResizeToFit
     };
 
+    // XXX alternatively
+    // std::for_each(extent, [&](Coordinate const& offset) {
+    //     at(topLeft + offset).setImage(imageInstance.fragment(offset));
+    // });
+
     for (Coordinate const offset : extent)
+#if 0
         at(topLeft + offset).setImage(imageInstance.fragment(offset));
+#else
+    {
+        Coordinate const coord = topLeft + offset;
+        Cell& cell = at(coord);
+        ImageFragment const imageFragment = imageInstance.fragment(offset);
+        cell.setImage(imageFragment);
+
+        if (offset.row < 2)
+        {
+            std::cout << fmt::format(
+                "{}.setImage: {}\n",
+                offset,
+                imageFragment
+            );
+        }
+    }
+#endif
 
     moveCursorTo(topLeft + extent + Coordinate{-1, 0});
 

@@ -1,7 +1,22 @@
+/**
+ * This file is part of the "libterminal" project
+ *   Copyright (c) 2019-2020 Christian Parpart <christian@parpart.family>
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 #pragma once
 
 #include <terminal/Commands.h>
 #include <terminal/Size.h>
+
+#include <fmt/format.h>
 
 #include <cstdint>
 #include <functional>
@@ -79,6 +94,8 @@ class Image {
         }
     }
 
+    constexpr int refCount() const noexcept { return refCount_; }
+
   private:
     Data data_;
     Size size_;
@@ -153,6 +170,9 @@ constexpr bool operator!=(ImageRef const& _a, ImageRef const& _b) noexcept
 /// An ImageFragment holds a graphical image that ocupies one full grid cell.
 class ImageFragment {
   public:
+    /// @param _image  the Image this fragment is being cut off from
+    /// @param _offset 0-based offset in pixels into the image
+    /// @param _size   fragment size
     ImageFragment(Image const& _image, Coordinate _offset, Size _size) :
         image_{ _image },
         offset_{ _offset },
@@ -168,6 +188,7 @@ class ImageFragment {
     Image const& image() const noexcept { return image_.get(); }
 
     Coordinate offset() const noexcept { return offset_; }
+    Size size() const noexcept { return size_; }
 
     /// Extracts the data from the image that is to be rendered. TODO: use spans instead.
     Image::Data data() const
@@ -210,21 +231,23 @@ struct RasterizedImage
     /// Image resize policy
     ImageResize resizePolicy = ImageResize::NoResize;
 
+    /// @returns number of pixels in X and Y dimension one grid cell has to fill.
+    Size cellSize() const noexcept
+    {
+        return image.get().size() / cellSpan;
+    }
+
+    /// @returns an ImageFragment for a grid cell at given coordinate @p _pos of the rasterized image.
     ImageFragment fragment(Coordinate _pos) const
     {
-        auto const cellUnitSize = Size{
-            image.get().width() / cellSpan.width,
-            image.get().height() / cellSpan.height
-        };
+        auto const cellUnitWidth = image.get().width() / cellSpan.width;
 
-        auto const offset = Coordinate{
+        auto const pixelOffset = Coordinate{
             _pos.row * image.get().width(),
-            _pos.column * cellUnitSize.width
+            _pos.column * cellUnitWidth
         };
 
-        auto const size = cellSpan;
-
-        return ImageFragment{image.get(), offset, size};
+        return ImageFragment{image.get(), pixelOffset, cellSpan};
     }
 };
 
@@ -281,3 +304,50 @@ class ImagePool {
 };
 
 } // end namespace
+
+namespace fmt
+{
+    template <>
+    struct formatter<terminal::Image>
+    {
+        template <typename ParseContext>
+        constexpr auto parse(ParseContext& ctx)
+        {
+            return ctx.begin();
+        }
+
+        template <typename FormatContext>
+        auto format(const terminal::Image& _image, FormatContext& ctx)
+        {
+            return format_to(
+                ctx.out(),
+                "Image<{}, size={}, refCount={}>",
+                (void const*) &_image,
+                _image.size(),
+                _image.refCount()
+            );
+        }
+    };
+
+    template <>
+    struct formatter<terminal::ImageFragment>
+    {
+        template <typename ParseContext>
+        constexpr auto parse(ParseContext& ctx)
+        {
+            return ctx.begin();
+        }
+
+        template <typename FormatContext>
+        auto format(const terminal::ImageFragment& _fragment, FormatContext& ctx)
+        {
+            return format_to(
+                ctx.out(),
+                "ImageFragment<{}, offset={}, size={}>",
+                _fragment.image(),
+                _fragment.offset(),
+                _fragment.size()
+            );
+        }
+    };
+}
